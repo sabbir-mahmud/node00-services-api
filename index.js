@@ -1,6 +1,7 @@
 // imports
 const express = require('express');
 const cors = require('cors');
+var jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const ObjectId = require('mongodb').ObjectId;
 require('dotenv').config();
@@ -15,6 +16,28 @@ const port = process.env.PORT || 5000;
  */
 app.use(cors());
 app.use(express.json());
+
+/**
+ * --------------------------------------------------
+ * verify jwt token
+ * --------------------------------------------------
+ */
+
+function verifyJWT(req, res, next) {
+    const authenticateToken = req.headers.authorization;
+    if (!authenticateToken) {
+        return res.status(401).send('Access denied. No token provided.');
+    }
+    const token = token.split(' ')[1];
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+        if (err) {
+            return res.status(401).send('Invalid token.');
+        }
+        req.user = decoded.user;
+        console.log('verify done');
+        next();
+    });
+}
 
 /**
  * --------------------------------------------------
@@ -40,6 +63,22 @@ async function servicesApi() {
         await client.connect();
         console.log('Connected to MongoDB');
         const productsCollection = client.db('E-shop').collection('products');
+
+        /**
+         * --------------------------------------------------
+         * jwt token generator
+         * --------------------------------------------------
+         */
+
+        app.post('/login', async (req, res) => {
+            const user = req.body
+            const token = jwt.sign({ user }, process.env.JWT_SECRET, {
+                expiresIn: '1d'
+            })
+            res.send({ token })
+        })
+
+
         /**
          * --------------------------------------------------
          * Get All Services
@@ -77,7 +116,7 @@ async function servicesApi() {
          * --------------------------------------------------
          */
 
-        app.post('/api/product/order', async (req, res) => {
+        app.post('/api/product/order', verifyJWT, async (req, res) => {
             const ordered_details = req.body;
             const ids = ordered_details.map(id => ObjectId(id));
             console.log(ordered_details);
@@ -122,7 +161,7 @@ async function orderApi() {
          * get orders
          * --------------------------------------------------
          */
-        app.get('/api/orders', async (req, res) => {
+        app.get('/api/orders', verifyJWT, async (req, res) => {
             const email = req.query.email;
             if (email) {
                 const orders = await ordersCollection.find({ email: email }).toArray();
@@ -138,7 +177,7 @@ async function orderApi() {
          * add new order
          * --------------------------------------------------
          */
-        app.post('/api/orders', async (req, res) => {
+        app.post('/api/orders', verifyJWT, async (req, res) => {
             const p_id = req.body.p_id;
             const email = req.body.email;
             let qtn;
